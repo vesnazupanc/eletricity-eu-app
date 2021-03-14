@@ -6,7 +6,18 @@ library(dplyr)
 
 country_codes = c("Avstrija"= "AT", "Slovenija"= "SI", "Nemčija"= "DE")
 
-get_consumption_data <- function(country, year){
+get_total_consumption <- function(country, year){
+  country_code <- str_replace_all(country, country_codes)
+  table_id = "nrg_cb_e"
+  list_geo = c(country_code)
+  list_time = c(year)
+  list_datatypes =  'FC'
+  data <- get_eurostat(table_id, filters = list(geo=list_geo, nrg_bal=list_datatypes, time=list_time), time_format = "num")
+  
+  return(data$values)
+}
+
+get_consumption_per_sector <- function(country, year){
   country_code <- str_replace_all(country, country_codes)
   table_id = "nrg_cb_e"
   list_geo = c(country_code)
@@ -14,7 +25,7 @@ get_consumption_data <- function(country, year){
   
   list_datatypes = c('NRG_E', 'NRG_CM_E', 'NRG_OIL_NG_E', 'NRG_PF_E', 'NRG_CO_E', 
                      'NRG_BKBPB_E', 'NRG_GW_E', 'NRG_BF_E', 'NRG_PR_E', 'NRG_NI_E', 'NRG_CL_E', 
-                     'NRG_LNG_E', 'NRG_BIOG_E', 'NRG_GTL_E', 'NRG_CPP_E', 'NRG_NSP_E', 'FC', 
+                     'NRG_LNG_E', 'NRG_BIOG_E', 'NRG_GTL_E', 'NRG_CPP_E', 'NRG_NSP_E', 
                      'FC_IND_E', 'FC_IND_IS_E', 'FC_IND_CPC_E', 'FC_IND_NFM_E', 'FC_IND_NMM_E', 
                      'FC_IND_TE_E', 'FC_IND_MAC_E', 'FC_IND_MQ_E', 'FC_IND_FBT_E', 'FC_IND_PPP_E', 
                      'FC_IND_WP_E', 'FC_IND_CON_E', 'FC_IND_TL_E', 'FC_IND_NSP_E', 'FC_TRA_E', 
@@ -30,7 +41,7 @@ get_consumption_data <- function(country, year){
                        'NRG_GW_E'= 'Energetski sektor', 'NRG_BF_E'= 'Energetski sektor', 'NRG_PR_E'= 'Energetski sektor',
                        'NRG_NI_E'= 'Energetski sektor', 'NRG_CL_E'= 'Energetski sektor', 'NRG_LNG_E'= 'Energetski sektor', 
                        'NRG_BIOG_E'= 'Energetski sektor', 'NRG_GTL_E'= 'Energetski sektor', 'NRG_CPP_E'= 'Energetski sektor',
-                       'NRG_NSP_E'= 'Energetski sektor', 'FC$'= 'Skupna poraba', 'FC_IND_E'= 'Industrijski sektor', 
+                       'NRG_NSP_E'= 'Energetski sektor', 'FC_IND_E'= 'Industrijski sektor', 
                        'FC_IND_IS_E'= 'Industrijski sektor', 'FC_IND_CPC_E'= 'Industrijski sektor', 'FC_IND_NFM_E'= 'Industrijski sektor',
                        'FC_IND_NMM_E'= 'Industrijski sektor', 'FC_IND_TE_E'= 'Industrijski sektor', 'FC_IND_MAC_E'= 'Industrijski sektor',
                        'FC_IND_MQ_E'= 'Industrijski sektor', 'FC_IND_FBT_E'= 'Industrijski sektor', 'FC_IND_PPP_E'= 'Industrijski sektor',
@@ -46,7 +57,7 @@ get_consumption_data <- function(country, year){
                           'NRG_BF_E'= 'Plavži', 'NRG_PR_E'= 'Rafinereje nafte', 'NRG_NI_E'= 'Jedrska industrija', 
                           'NRG_CL_E'= 'Naprave za utekočinjenje premoga', 'NRG_LNG_E'= 'Naprave za utekočinjenje in uplinjanje (LNG)',
                           'NRG_BIOG_E'= 'Naprave za uplinjanje bioplina', 'NRG_GTL_E'= 'Obrati za plin in tekočine',
-                          'NRG_CPP_E'= 'Proizvodnja oglja', 'NRG_NSP_E'= 'Drugo', 'FC$'= '-', 'FC_IND_E'= 'Skupaj', 
+                          'NRG_CPP_E'= 'Proizvodnja oglja', 'NRG_NSP_E'= 'Drugo', 'FC_IND_E'= 'Skupaj', 
                           'FC_IND_IS_E'= 'Železo in jeklo', 'FC_IND_CPC_E'= 'Kemična in petrokemijska industrija',
                           'FC_IND_NFM_E'= 'Neželezna kovine', 'FC_IND_NMM_E'= 'Nekovisnki minerali',
                           'FC_IND_TE_E'= 'Transportna oprema', 'FC_IND_MAC_E'= 'Stroji', 'FC_IND_MQ_E'= 'Rudarstvo in kamnolomi',
@@ -87,7 +98,7 @@ ui <- dashboardPage(
     # Boxes need to be put in a row (or column)
     fluidRow(
       box(title = "Parametri pregleda",
-        column(7, sliderInput("slider", "Izberite leto:", 1999, 2019, 1999)),
+        column(7, sliderInput("slider", "Izberite leto:", 1999, 2019, 1999, sep="")),
         column(4, selectInput("country", "Izberite državo:", names(country_codes), "Slovenija"))
       ))
     ,
@@ -106,11 +117,15 @@ ui <- dashboardPage(
         ,plotlyOutput("consumption_per_sector", height = "300px")
       )
       ,box(
-        title = "Poraba po podsektorjih izbranega sektorja"
+        title = "Podrobenjši pregled EE po sektorjih"
         ,status = "primary"
         ,solidHeader = TRUE 
         ,collapsible = TRUE 
-        ,plotOutput("consumption_per_subsector", height = "300px")
+        ,selectInput("sector", "Izberite sektor:", c('Enetgetski sektor', 'Energetski sektor', 'Industrijski sektor',
+                                                     'Prometni sektor', 'Komercialne in javne storitve', 'Gospodinjstva', 
+                                                     'Drugi sektorji'))
+                     
+        ,plotlyOutput("consumption_per_subsector", height = "300px")
       ) 
     )
   )
@@ -125,8 +140,11 @@ server <- function(input, output) {
   ###################
   
   data_consumption <- reactive({
-    data <- get_consumption_data(input$country, input$slider)
-    return(data)
+    get_consumption_per_sector(input$country, input$slider)
+  })
+  
+  total_consumption_val <- reactive({
+    get_total_consumption(input$country, input$slider)
   })
   
   output$choosen_country <- renderValueBox({
@@ -147,8 +165,8 @@ server <- function(input, output) {
   
   output$total_consumption <- renderValueBox({ 
     valueBox(
-      paste(formatC(filter(data_consumption(), Sektor == 'Skupna poraba')$values,
-                    format="d", big.mark='.', decimal.mark = ","), " GWh")
+      paste(formatC(total_consumption_val(),
+                    format="d", big.mark='.', decimal.mark = ","), "GWh")
       ,'Skupna poraba električne energije'
       ,icon = icon("bolt")
       ,color = "green")  
@@ -160,12 +178,23 @@ server <- function(input, output) {
   
   output$consumption_per_sector <- renderPlotly({
     data <- data_consumption()
-    df <- data %>% filter(Sektor!='Skupna Poraba')
-    fig_sectors <- plot_ly(type='pie', labels=df$Sektor, values=df$values, 
+    fig_sectors <- plot_ly(type='pie', labels=data$Sektor, values=data$values, 
                            textinfo='label+percent',
                            insidetextorientation='radial')
     
+    fig_sectors <- fig_sectors %>% layout(showlegend = FALSE)
     fig_sectors
+  })
+  
+  output$consumption_per_subsector <- renderPlotly({
+    data <- data_consumption()
+    df <- data %>% filter(Sektor == input$sector, Podsektor != "Skupaj")
+    fig_subsectors <- plot_ly(type='pie', labels=df$Podsektor, values=df$values, 
+                           textinfo='label+percent',
+                           insidetextorientation='radial')
+    
+    fig_subsectors <- fig_subsectors %>% layout(showlegend = FALSE)
+    fig_subsectors
   })
   
   
