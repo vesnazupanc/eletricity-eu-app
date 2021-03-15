@@ -1,8 +1,15 @@
+library(plotly)
+library(shiny)
 library(shinydashboard)
+library(shinyWidgets)
 library(eurostat)
 library(stringr)
 library(dplyr)
 
+
+
+
+##### IMPORT FUNCTIONS #####
 
 country_codes = c("Avstrija"= "AT", "Slovenija"= "SI", "Nemčija"= "DE")
 
@@ -38,51 +45,87 @@ get_consumption_per_sector <- function(country){
 }
 
 
+##### USER INTERFACE #####
+
+
+home_tab <- tabItem(
+  tabName = 'home',
+  h1("Naslov texta"),
+  p("Navaden text")
+  )
+
+
+consumption_tab <- tabItem(
+  tabName = 'consumption',
+  fluidRow(
+    box(title = "Parametri pregleda", width = 4,
+        sliderInput("year_slider", "Izberite leto:", 1990, as.integer(format(Sys.Date(), "%Y"))-1, 1990, sep=""),
+        selectInput("country", "Izberite državo:", names(country_codes), "Slovenija"))
+    
+    ,box(title = "Poraba EE po letih", width = 8, height = 350,
+         plotlyOutput("consumption_yearly"))
+  ),
+  
+  fluidRow(
+    valueBoxOutput("choosen_country"),
+    valueBoxOutput("choosen_year"),
+    valueBoxOutput("total_consumption")
+  ),
+  
+  fluidRow(
+    box(
+      title = "Poraba EE po sektorjih - pie chart"
+      ,status = "primary"
+      ,solidHeader = TRUE 
+      ,collapsible = TRUE 
+      ,plotlyOutput("consumption_per_sector") #,height = "500px"
+    )
+    ,box(
+      title = "Poraba EE po sektorjih - tabela"
+      ,status = "primary"
+      ,solidHeader = TRUE 
+      ,collapsible = TRUE 
+      ,tableOutput("consumption_per_sector_tbl"))
+  )
+)
+
+  
+
+
+
 
 ui <- dashboardPage(
-  dashboardHeader(title = "Električna energija v EU"),
+  
+  dashboardHeader(title = "Elektrika v EU"),
+  
   dashboardSidebar(
     sidebarMenu(
-      menuItem("Poraba", tabName = "dashboard", icon = icon("plug")),
-      menuItem("Proizvodnja", tabName = "widgets", icon = icon("industry"))
+      menuItem("Domov", tabName = 'home', icon = icon("home")),
+      menuItem("Poraba", tabName = "consumption", icon = icon("plug")),
+      menuItem("Proizvodnja", tabName = "production", icon = icon("industry"))
     )
   ),
+  
   dashboardBody(
-    # Boxes need to be put in a row (or column)
-    fluidRow(
-      box(title = "Parametri pregleda", width = 4,
-          sliderInput("year_slider", "Izberite leto:", 1990, as.integer(format(Sys.Date(), "%Y"))-1, 1990, sep=""),
-          selectInput("country", "Izberite državo:", names(country_codes), "Slovenija"))
+    tags$img(src = "https://images.freeimages.com/images/large-previews/ad6/light-bulb-1416824.jpg",
+             style = 'position: absolute; opacity: 0.2;'),
+    tabItems(
+      home_tab
       
-      ,box(title = "Poraba EE po letih", width = 8, height = 350,
-           plotlyOutput("consumption_yearly"))
-      ),
-    
-    fluidRow(
-      valueBoxOutput("choosen_country"),
-      valueBoxOutput("choosen_year"),
-      valueBoxOutput("total_consumption")
-      ),
-    
-    fluidRow(
-      box(
-        title = "Poraba EE po sektorjih - pie chart"
-        ,status = "primary"
-        ,solidHeader = TRUE 
-        ,collapsible = TRUE 
-        ,plotlyOutput("consumption_per_sector") #,height = "500px"
-        )
-      ,box(
-        title = "Poraba EE po sektorjih - tabela"
-        ,status = "primary"
-        ,solidHeader = TRUE 
-        ,collapsible = TRUE 
-        ,tableOutput("consumption_per_sector_tbl")
-      ) 
+      ,consumption_tab
+      
+      ,tabItem(tabName = "production",
+               h2("production tab content"))
     )
   )
 
 )
+
+##### SERVER #####
+
+
+
+
 
 
 server <- function(input, output) {
@@ -132,8 +175,8 @@ server <- function(input, output) {
     data <- data_consumption()
     cons_yearly <- data %>% group_by(time) %>% summarise(values = sum(values))
     
-    default_color = "rgba(150, 150, 150, 0.7)"
-    chosen_color = "steelblue3"
+    default_color = "grey"
+    chosen_color = "green"
     color_list <- rep(default_color, nrow(cons_yearly))
     
     if(input$year_slider <= cons_yearly$time %>% max()){
@@ -177,9 +220,7 @@ server <- function(input, output) {
     df <- subset(df, select = -c(values))
     df
   })
-  
-  
-  
 }
+
 
 shinyApp(ui, server)
