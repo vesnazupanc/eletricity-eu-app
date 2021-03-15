@@ -7,11 +7,82 @@ library(stringr)
 library(dplyr)
 
 
-
+country_codes = c('Belgija' = 'BE', 'Bulgarija' = 'BG', 'Češka' = 'CZ', 'Danska' = 'DK', 'Nemčija' = 'DE', 
+                  'Estonija' = 'EE', 'Irska' = 'IE', 'Grčija' = 'EL', 'Španija' = 'ES', 'Francija' = 'FR', 
+                  'Hrvaška' = 'HR', 'Italija' = 'IT', 'Ciper' = 'CY', 'Latvija' = 'LV', 'Litva' = 'LT', 
+                  'Luksemburg' = 'LU', 'Madžarska' = 'HU', 'Malta' = 'MT', 'Nizozemska' = 'NL', 'Avstrija' = 'AT',
+                  'Poljska' = 'PL', 'Portugalska' = 'PT', 'Romunija' = 'RO', 'Slovenija' = 'SI', 'Slovaška' = 'SK',
+                  'Finska' = 'FI', 'Švedska' = 'SE', 'Islandija' = 'IS', 'Norveška' = 'NO', 'Združeno kraljestvo' = 'UK',
+                  'Črna gora' = 'ME', 'Severna Makedonija' = 'MK', 'Albanija' = 'AL', 'Srbija' = 'RS', 'Turčija' = 'TR',
+                  'Bosna in Hercegovina' = 'BA', 'Kosovo' = 'XK', 'Molavija' = 'MD', 'Ukrajina' = 'UA', 'Gruzija' = 'GE')
 
 ##### IMPORT FUNCTIONS #####
 
-country_codes = c("Avstrija"= "AT", "Slovenija"= "SI", "Nemčija"= "DE")
+get_total_production <- function(country, year){
+  country_code <- str_replace_all(country, country_codes)
+  table_id = "nrg_bal_peh"
+  list_geo = c(country_code)
+  list_time = c(year)
+  list_datatypes =  'TOTAL'
+  data <- get_eurostat(table_id, filters = list(nrg_bal = c("GEP"), geo=list_geo,
+                                                siec=list_datatypes, time = list_time,
+                                                unit=c("GWH")
+  ), time_format = "num")  
+  return(data$values)
+}
+
+get_import_export <- function(country, year){
+  country_code <- str_replace_all(country, country_codes)
+  table_id = "nrg_cb_e"
+  list_geo = c(country_code)
+  list_time = c(year)
+  list_datatypes =  c("IMP", "EXP")
+  data <- get_eurostat(table_id, filters = list(geo=list_geo, nrg_bal=list_datatypes, time=list_time), time_format = "num")
+  
+  return(c("import" = data[data$nrg_bal=='IMP',]$values, "export" = data[data$nrg_bal=='EXP',]$values))
+}
+
+
+get_production_per_type <- function(country){
+  country_code <- str_replace_all(country, country_codes)
+  table_id = "nrg_bal_peh"
+  list_geo = c(country_code)
+  
+  list_datatypes = c('N900H', 'RA100', 'RA000', 'RA300', 'RA410', 'RA420', 'C0350-0370',
+                     'P1000', 'S2000', 'O4000XBIO', 'W6100_6220', 'G3000', 'C0000X0350-0370')
+  
+  data <- get_eurostat(table_id, filters = list(nrg_bal = c("GEP"), geo=list_geo,
+                                                siec=list_datatypes,
+                                                unit=c("GWH")
+  ), time_format = "num")
+  
+  decode_datatypes = c('N900H' = 'Nuklearna',
+                       'RA100' = 'Hidro',
+                       'RA000' = 'Obnovljivi',
+                       'RA300' = 'Veter',
+                       'RA410' = 'Sonce', 
+                       'RA420' = 'Sonce',
+                       'C0350-0370' = 'Ostali neobnovljivi viri',
+                       'P1000' = 'Ostali neobnovljivi viri',
+                       'S2000' = 'Ostali neobnovljivi viri',
+                       'O4000XBIO' = 'Ostali neobnovljivi viri',
+                       'W6100_6220' = 'Ostali neobnovljivi viri', 
+                       'G3000' = 'Naravni plin', 
+                       'C0000X0350-0370' = 'Fosilna goriva')
+  
+  # SECTOR DATA TRANSLATION
+  
+  data$Vir <- str_replace_all(data$siec, decode_datatypes)
+  res_temp <- data %>% filter(Vir%in%c('Obnovljivi','Hidro', 'Veter', 'Sonce'))
+  res_temp[res_temp$Vir%in%c('Hidro', 'Veter', 'Sonce'),c('values')] <- -1*res_temp[res_temp$Vir%in%c('Hidro', 'Veter', 'Sonce'),c('values')]
+  res_temp <- res_temp %>% group_by(geo, time) %>% summarise(values = sum(values))
+  res_temp$Vir <- "Ostali obnovljivi viri"
+  
+  df <- rbind(subset(data, Vir != 'Obnovljivi', select = c('geo', 'time', 'values', 'Vir')), res_temp)
+  
+  return(df)
+  
+}
 
 get_total_consumption <- function(country, year){
   country_code <- str_replace_all(country, country_codes)
@@ -51,7 +122,7 @@ get_consumption_per_sector <- function(country){
 home_tab <- tabItem(
   tabName = 'home',
   h1("Naslov texta"),
-  p("Navaden text")
+  p("Navaden text ... tu bo opis kaj je ta aplikacija ipd :) ")
   )
 
 
@@ -73,24 +144,46 @@ consumption_tab <- tabItem(
   ),
   
   fluidRow(
-    box(
-      title = "Poraba EE po sektorjih - pie chart"
-      ,status = "primary"
-      ,solidHeader = TRUE 
-      ,collapsible = TRUE 
-      ,plotlyOutput("consumption_per_sector") #,height = "500px"
+    tabBox(
+      title = "Poraba EE po sektorjih"
+      ,tabPanel(icon("chart-pie"),plotlyOutput("consumption_per_sector"))
+      ,tabPanel(icon("table"), tableOutput("consumption_per_sector_tbl"))
     )
-    ,box(
-      title = "Poraba EE po sektorjih - tabela"
-      ,status = "primary"
-      ,solidHeader = TRUE 
-      ,collapsible = TRUE 
-      ,tableOutput("consumption_per_sector_tbl"))
   )
 )
 
   
-
+production_tab <- tabItem(
+  tabName = 'production',
+  fluidRow(
+    box(title = "Parametri pregleda", width = 4,
+        sliderInput("year_slider2", "Izberite leto:", 1990, as.integer(format(Sys.Date(), "%Y"))-1, 1990, sep=""),
+        selectInput("country2", "Izberite državo:", names(country_codes), "Slovenija"))
+    
+    ,box(title = "Proizvodnja EE po letih", width = 8, height = 350,
+         plotlyOutput("production_yearly"))
+  ),
+  
+  fluidRow(
+    valueBoxOutput("choosen_country2"),
+    valueBoxOutput("choosen_year2"),
+    valueBoxOutput("total_production")
+  ),
+  
+  fluidRow(
+    tabBox(
+      title = "Proizvodnja EE glede na vir goriva"
+      ,height = 700
+      ,tabPanel(icon("chart-pie"), plotlyOutput("production_per_type_pie"))
+      ,tabPanel(icon("table"), tableOutput("production_per_type_tbl"))
+    )
+    ,box(
+      title = "Tukaj uvoz izvoz?"
+      ,status = "primary"
+      ,solidHeader = TRUE 
+      ,collapsible = TRUE)
+  )
+)
 
 
 
@@ -114,8 +207,7 @@ ui <- dashboardPage(
       
       ,consumption_tab
       
-      ,tabItem(tabName = "production",
-               h2("production tab content"))
+      ,production_tab
     )
   )
 
@@ -130,9 +222,9 @@ ui <- dashboardPage(
 
 server <- function(input, output) {
   
-  ###################
-  # INFORMATION BOX #
-  ###################
+  ##### PORABA #####
+  
+  ##### information box #####
   
   data_consumption <- reactive({
     get_consumption_per_sector(input$country)
@@ -167,9 +259,7 @@ server <- function(input, output) {
       ,color = "green")  
   })
   
-  ####################
-  # PLOTS AND TABLES #
-  ####################
+  ##### plots and tables #####
   
   output$consumption_yearly <- renderPlotly({
     data <- data_consumption()
@@ -195,7 +285,7 @@ server <- function(input, output) {
              xaxis = list(title = "Leto"),
              barmode = 'stack')
     
-    fig_yearly
+    fig_yearly 
   })
   
   output$consumption_per_sector <- renderPlotly({
@@ -220,7 +310,42 @@ server <- function(input, output) {
     df <- subset(df, select = -c(values))
     df
   })
+  
+  ##### PROIZVODNJA #####
+  
+  ##### information box #####
+  
+  data_production <- reactive({
+    get_production_per_type(input$country)
+  })
+  
+  total_production_val <- reactive({
+    get_total_production(input$country, input$year_slider)
+  })
+  
+  output$production_per_type_pie <- renderPlotly({
+    data <- data_production()
+    df <- data %>% filter(time == input$year_slider)
+    fig <- plot_ly(type='pie', labels=df$Vir, values=df$values, 
+                   textinfo='label+percent',
+                   insidetextorientation='radial',
+                   hovertemplate = "%{label}: <br>Proizvodnja: %{value} GWh<extra></extra>")
+    
+    fig <- fig %>% layout(showlegend = FALSE)
+    fig
+  })
+  
+  output$production_per_type_tbl <- renderTable({
+    data <- data_production()
+    df <- data %>% filter(time == input$year_slider)
+    df <- subset(df, select = c(Vir, values))
+    df <- df %>% mutate(Proizvodnja=paste(round(values,2),"GWh"),
+                        Procent=paste0(round(values/sum(values)*100,2),"%"))
+    df <- df[order(df$values, decreasing = TRUE),]
+    df <- subset(df, select = -c(values))
+    df})
 }
+
 
 
 shinyApp(ui, server)
